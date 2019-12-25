@@ -2,6 +2,6 @@
 <Workspace
    version = "1.0">
    <FileRef
-      location = "self:Maps&amp;Places.xcodeproj">
+      location = "self:">
    </FileRef>
 </Workspace>
