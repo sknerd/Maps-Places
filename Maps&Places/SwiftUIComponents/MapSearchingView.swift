@@ -8,10 +8,31 @@
 
 import SwiftUI
 import MapKit
+import Combine
 
 struct MapViewContainer: UIViewRepresentable {
     
+    
+    func makeCoordinator() -> MapViewContainer.Coordinator {
+        return Coordinator(mapView: mapView)
+    }
+    
+    class Coordinator: NSObject, MKMapViewDelegate {
+        
+        init(mapView: MKMapView) {
+            super.init()
+            mapView.delegate = self
+        }
+        
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            let pinAnnotationView = MKPinAnnotationView(annotation: annotation, reuseIdentifier: "id")
+            pinAnnotationView.canShowCallout = true
+            return pinAnnotationView
+        }
+    }
+    
     var annotations = [MKPointAnnotation]()
+    var selectedMapItem: MKMapItem?
     
     let mapView = MKMapView()
     
@@ -19,6 +40,8 @@ struct MapViewContainer: UIViewRepresentable {
         setupRegionForMap()
         return mapView
     }
+    
+    
     
     fileprivate func setupRegionForMap() {
         let centerCoordinate = CLLocationCoordinate2D(latitude: 55.7557, longitude: 37.6298)
@@ -28,9 +51,35 @@ struct MapViewContainer: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: MKMapView, context: UIViewRepresentableContext<MapViewContainer>) {
-        uiView.removeAnnotations(uiView.annotations)
-        uiView.addAnnotations(annotations)
-        uiView.showAnnotations(uiView.annotations, animated: true)
+        
+        if annotations.count == 0 {
+            uiView.removeAnnotations(uiView.annotations)
+            return
+        }
+        
+        if shouldRefreshAnnotations(mapView: uiView) {
+            uiView.removeAnnotations(uiView.annotations)
+            uiView.addAnnotations(annotations)
+            uiView.showAnnotations(uiView.annotations, animated: false)
+        }
+        
+        uiView.annotations.forEach { (annotation) in
+            if annotation.title == selectedMapItem?.name {
+                uiView.selectAnnotation(annotation, animated: true)
+            }
+        }
+    }
+    
+    // This checks to see whether or not annotations have changed.  The algorithm generates a hashmap/dictionary for all the annotations and then goes through the map to check if they exist. If it doesn't currently exist, we treat this as a need to refresh the map
+    
+    fileprivate func shouldRefreshAnnotations(mapView: MKMapView) -> Bool {
+        let grouped = Dictionary(grouping: mapView.annotations, by: { $0.title ?? ""})
+        for (_, annotation) in annotations.enumerated() {
+            if grouped[annotation.title ?? ""] == nil {
+                return true
+            }
+        }
+        return false
     }
     
     typealias UIViewType = MKMapView
@@ -40,6 +89,42 @@ class MapSearchingViewModel: ObservableObject {
     
     @Published var annotations = [MKPointAnnotation]()
     @Published var isSearching = false
+    @Published var searchQuery = ""
+    
+    @Published var mapItems = [MKMapItem]()
+    
+    @Published var selectedMapItem: MKMapItem?
+    @Published var keyboardHeight: CGFloat?
+    
+    
+    var cancellable: AnyCancellable?
+    
+    init() {
+        cancellable = $searchQuery.debounce(for: .milliseconds(500), scheduler: RunLoop.main)
+            .sink { [weak self] (searchTerm) in
+                self?.performSearch(query: searchTerm)
+        }
+        
+        listenForKeyboardNotifications()
+    }
+    
+    fileprivate func listenForKeyboardNotifications() {
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] (notification) in
+            guard let value = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue else { return }
+            let keyboardFrame = value.cgRectValue
+            let window = UIApplication.shared.windows.filter {$0.isKeyWindow}.first
+            
+            withAnimation(.easeOut(duration: 0.25)) {
+                self?.keyboardHeight = keyboardFrame.height - window!.safeAreaInsets.bottom
+            }
+        }
+        
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] (notification) in
+            withAnimation(.easeOut(duration: 0.25)) {
+                self?.keyboardHeight = 0
+            }
+        }
+    }
     
     fileprivate func performSearch(query: String) {
         isSearching = true // also can use isSearching.toggle()
@@ -52,6 +137,9 @@ class MapSearchingViewModel: ObservableObject {
                 print(error)
                 return
             }
+            
+            self.mapItems = response?.mapItems ?? []
+            
             var barsAnnotations = [MKPointAnnotation]()
             
             response?.mapItems.forEach({ (mapItem) in
@@ -74,30 +162,53 @@ struct MapSearchingView: View {
     var body: some View {
         ZStack(alignment: .top) {
             
-            MapViewContainer(annotations: vm.annotations)
+            MapViewContainer(annotations: vm.annotations, selectedMapItem: vm.selectedMapItem)
                 .edgesIgnoringSafeArea(.all)
             
             VStack(spacing: 12) {
                 HStack {
-                    Button(action: {
-                        self.vm.performSearch(query: "Bar")
-                    }, label: {
-                        Text("Search for bars")
-                            .padding()
-                            .background(Color.white)
+                    TextField("Search terms", text: $vm.searchQuery, onCommit: {
+                        UIApplication.shared.keyWindow?.endEditing(true)
                     })
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color.white)
                     
-                    Button(action: {
-                        self.vm.annotations = []
-                    }, label: {
-                        Text("Clear Annotations")
-                            .padding()
-                            .background(Color.white)
-                    })
-                }.shadow(radius: 3)
-                if vm.isSearching {
-                   Text("Searching...")
                 }
+                .padding()
+                if vm.isSearching {
+                    Text("Searching...")
+                }
+                
+                Spacer()
+                
+                ScrollView(.horizontal) {
+                    HStack(spacing: 16) {
+                        ForEach(vm.mapItems, id: \.self) { item in
+                            
+                            Button(action: {
+                                
+                                print(item.name ?? "")
+                                self.vm.selectedMapItem = item
+                                
+                            }, label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.name ?? "")
+                                        .font(.headline)
+                                    Text(item.placemark.title ?? "")
+                                }
+                            }).foregroundColor(.black)
+                                
+                                .padding()
+                                .frame(width: 200)
+                                .background(Color.white)
+                                .cornerRadius(5)
+                        }
+                        
+                    }.padding(.horizontal, 16)
+                }.shadow(radius: 3)
+                
+                Spacer().frame(height: vm.keyboardHeight)
             }
         }
     }
@@ -108,3 +219,20 @@ struct MapSearchingView_Previews: PreviewProvider {
         MapSearchingView()
     }
 }
+
+
+//                    Button(action: {
+//                        self.vm.performSearch(query: "Bar")
+//                    }, label: {
+//                        Text("Search for bars")
+//                            .padding()
+//                            .background(Color.white)
+//                    })
+//
+//                    Button(action: {
+//                        self.vm.annotations = []
+//                    }, label: {
+//                        Text("Clear Annotations")
+//                            .padding()
+//                            .background(Color.white)
+//                    })
