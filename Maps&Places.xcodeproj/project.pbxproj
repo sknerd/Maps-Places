@@ -46,7 +46,6 @@
 		8173AA3A23994082000D8C87 /* LocationSearchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationSearchController.swift; sourceTree = "<group>"; };
 		8183CFB42397ECD600FDA2F5 /* LocationsCarouselController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationsCarouselController.swift; sourceTree = "<group>"; };
 		8183CFB62397F58000FDA2F5 /* MKMapItem+Adress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MKMapItem+Adress.swift"; sourceTree = "<group>"; };
-		81B29831239832AF0027B78C /* Saint-Petersburg.gpx */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "Saint-Petersburg.gpx"; sourceTree = "<group>"; };
 		81E2968823997DBD0083EE9D /* RouteHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteHeader.swift; sourceTree = "<group>"; };
 		E4F0AF6FE38E98BB6F78D8A8 /* Pods_Maps_Places.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Maps_Places.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -76,7 +75,6 @@
 		810D7FE82397C9770037DC0B = {
 			isa = PBXGroup;
 			children = (
-				81B29831239832AF0027B78C /* Saint-Petersburg.gpx */,
 				810D7FF32397C9770037DC0B /* Maps&Places */,
 				810D7FF22397C9770037DC0B /* Products */,
 				CCC07ACF500FC718A75AEEA1 /* Pods */,

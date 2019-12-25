@@ -12,7 +12,6 @@ import Combine
 
 struct MapViewContainer: UIViewRepresentable {
     
-    
     func makeCoordinator() -> MapViewContainer.Coordinator {
         return Coordinator(mapView: mapView)
     }
@@ -32,6 +31,12 @@ struct MapViewContainer: UIViewRepresentable {
             pinAnnotationView.canShowCallout = true
             return pinAnnotationView
         }
+        
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            NotificationCenter.default.post(name: MapViewContainer.Coordinator.regionChangedNotification, object: mapView.region)
+        }
+        
+        static let regionChangedNotification = NSNotification.Name("regionChangedNotification")
     }
     
     var annotations = [MKPointAnnotation]()
@@ -55,12 +60,10 @@ struct MapViewContainer: UIViewRepresentable {
     
     func updateUIView(_ uiView: MKMapView, context: UIViewRepresentableContext<MapViewContainer>) {
         
-        let span = MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
-        let region = MKCoordinateRegion(center: currentLocation, span: span)
-        
-        uiView.setRegion(region, animated: true)
-        
         if annotations.count == 0 {
+            let span = MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+            let region = MKCoordinateRegion(center: currentLocation, span: span)
+            uiView.setRegion(region, animated: true)
             uiView.removeAnnotations(uiView.annotations)
             return
         }
@@ -68,7 +71,7 @@ struct MapViewContainer: UIViewRepresentable {
         if shouldRefreshAnnotations(mapView: uiView) {
             uiView.removeAnnotations(uiView.annotations)
             uiView.addAnnotations(annotations)
-            uiView.showAnnotations(uiView.annotations, animated: false)
+            uiView.showAnnotations(uiView.annotations.filter {$0 is MKPointAnnotation}, animated: false)
         }
         
         uiView.annotations.forEach { (annotation) in
@@ -133,7 +136,13 @@ class MapSearchingViewModel: NSObject, ObservableObject, CLLocationManagerDelega
         locationManager.requestWhenInUseAuthorization()
         
         listenForKeyboardNotifications()
+        
+        NotificationCenter.default.addObserver(forName: MapViewContainer.Coordinator.regionChangedNotification, object: nil, queue: .main) { [weak self] (notification) in
+            self?.region = notification.object as? MKCoordinateRegion
+        }
     }
+    
+    fileprivate var region: MKCoordinateRegion?
     
     fileprivate func listenForKeyboardNotifications() {
         NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] (notification) in
@@ -156,8 +165,10 @@ class MapSearchingViewModel: NSObject, ObservableObject, CLLocationManagerDelega
     fileprivate func performSearch(query: String) {
         isSearching = true // also can use isSearching.toggle()
         let request = MKLocalSearch.Request()
-        
         request.naturalLanguageQuery = query
+        if let region = self.region {
+            request.region = region
+        }
         let localSearch = MKLocalSearch(request: request)
         localSearch.start { (response, error) in
             if let error = error {
