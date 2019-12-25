@@ -25,6 +25,9 @@ struct MapViewContainer: UIViewRepresentable {
         }
         
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            
+            if !(annotation is MKPointAnnotation) { return nil }
+            
             let pinAnnotationView = MKPinAnnotationView(annotation: annotation, reuseIdentifier: "id")
             pinAnnotationView.canShowCallout = true
             return pinAnnotationView
@@ -33,15 +36,15 @@ struct MapViewContainer: UIViewRepresentable {
     
     var annotations = [MKPointAnnotation]()
     var selectedMapItem: MKMapItem?
+    var currentLocation = CLLocationCoordinate2D(latitude: 55.7557, longitude: 37.6298)
     
     let mapView = MKMapView()
     
     func makeUIView(context: UIViewRepresentableContext<MapViewContainer>) -> MKMapView {
         setupRegionForMap()
+        mapView.showsUserLocation = true
         return mapView
     }
-    
-    
     
     fileprivate func setupRegionForMap() {
         let centerCoordinate = CLLocationCoordinate2D(latitude: 55.7557, longitude: 37.6298)
@@ -51,6 +54,11 @@ struct MapViewContainer: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: MKMapView, context: UIViewRepresentableContext<MapViewContainer>) {
+        
+        let span = MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+        let region = MKCoordinateRegion(center: currentLocation, span: span)
+        
+        uiView.setRegion(region, animated: true)
         
         if annotations.count == 0 {
             uiView.removeAnnotations(uiView.annotations)
@@ -85,7 +93,7 @@ struct MapViewContainer: UIViewRepresentable {
     typealias UIViewType = MKMapView
 }
 
-class MapSearchingViewModel: ObservableObject {
+class MapSearchingViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
     
     @Published var annotations = [MKPointAnnotation]()
     @Published var isSearching = false
@@ -94,16 +102,35 @@ class MapSearchingViewModel: ObservableObject {
     @Published var mapItems = [MKMapItem]()
     
     @Published var selectedMapItem: MKMapItem?
-    @Published var keyboardHeight: CGFloat?
+    @Published var keyboardHeight: CGFloat = 0
+    
+    @Published var currentLocation = CLLocationCoordinate2D(latitude: 55.7557, longitude: 37.6298)
     
     
     var cancellable: AnyCancellable?
     
-    init() {
+    let locationManager = CLLocationManager()
+    
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        if status == .authorizedWhenInUse {
+            locationManager.startUpdatingLocation()
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let firstLocation = locations.first else { return }
+        self.currentLocation = firstLocation.coordinate
+    }
+    
+    override init() {
+        super.init()
         cancellable = $searchQuery.debounce(for: .milliseconds(500), scheduler: RunLoop.main)
             .sink { [weak self] (searchTerm) in
                 self?.performSearch(query: searchTerm)
         }
+        
+        locationManager.delegate = self
+        locationManager.requestWhenInUseAuthorization()
         
         listenForKeyboardNotifications()
     }
@@ -162,7 +189,7 @@ struct MapSearchingView: View {
     var body: some View {
         ZStack(alignment: .top) {
             
-            MapViewContainer(annotations: vm.annotations, selectedMapItem: vm.selectedMapItem)
+            MapViewContainer(annotations: vm.annotations, selectedMapItem: vm.selectedMapItem, currentLocation: vm.currentLocation)
                 .edgesIgnoringSafeArea(.all)
             
             VStack(spacing: 12) {
@@ -173,7 +200,6 @@ struct MapSearchingView: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                         .background(Color.white)
-                    
                 }
                 .padding()
                 if vm.isSearching {
