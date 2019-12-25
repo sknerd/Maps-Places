@@ -34,41 +34,15 @@ struct MapViewContainer: UIViewRepresentable {
     }
     
     typealias UIViewType = MKMapView
-    
 }
 
-struct MapSearchingView: View {
+class MapSearchingViewModel: ObservableObject {
     
-    @State var dummyAnnotation: MKPointAnnotation?
-    
-    @State var annotations = [MKPointAnnotation]()
-    
-    var body: some View {
-        ZStack(alignment: .top) {
-            
-            MapViewContainer(annotations: annotations)
-                .edgesIgnoringSafeArea(.all)
-            HStack {
-                Button(action: {
-                    self.performSearch(query: "Bar")
-                }, label: {
-                    Text("Search for bars")
-                    .padding()
-                        .background(Color.white)
-                })
-                
-                Button(action: {
-                    self.annotations = []
-                }, label: {
-                    Text("Clear Annotations")
-                    .padding()
-                        .background(Color.white)
-                })
-            }.shadow(radius: 3)
-        }
-    }
+    @Published var annotations = [MKPointAnnotation]()
+    @Published var isSearching = false
     
     fileprivate func performSearch(query: String) {
+        isSearching = true // also can use isSearching.toggle()
         let request = MKLocalSearch.Request()
         
         request.naturalLanguageQuery = query
@@ -87,7 +61,44 @@ struct MapSearchingView: View {
                 annotation.coordinate = mapItem.placemark.coordinate
                 barsAnnotations.append(annotation)
             })
+            self.isSearching = false
             self.annotations = barsAnnotations
+        }
+    }
+}
+
+struct MapSearchingView: View {
+    
+    @ObservedObject var vm = MapSearchingViewModel()
+    
+    var body: some View {
+        ZStack(alignment: .top) {
+            
+            MapViewContainer(annotations: vm.annotations)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 12) {
+                HStack {
+                    Button(action: {
+                        self.vm.performSearch(query: "Bar")
+                    }, label: {
+                        Text("Search for bars")
+                            .padding()
+                            .background(Color.white)
+                    })
+                    
+                    Button(action: {
+                        self.vm.annotations = []
+                    }, label: {
+                        Text("Clear Annotations")
+                            .padding()
+                            .background(Color.white)
+                    })
+                }.shadow(radius: 3)
+                if vm.isSearching {
+                   Text("Searching...")
+                }
+            }
         }
     }
 }
